@@ -1,6 +1,8 @@
 [submodule "i-dolly-backend"]
 	path = i-dolly-backend
 	url = https://github.com/TranXuanAnh930/i-dolly-backend.git
+	branch = main
 [submodule "i-dolly-frontend"]
 	path = i-dolly-frontend
 	url = https://github.com/TranXuanAnh930/i-dolly-frontend.git
+	branch = main
