@@ -128,6 +128,57 @@ the algorithm itself locks every affected `ticket_types`/`lottery_campaigns`/`lo
 for that concert before touching any of them. Full sequence diagram:
 [`database-design.md` §5.2](https://github.com/TranXuanAnh930/i-dolly-backend/blob/main/docs/database-design.md).
 
+## Use case flows
+
+Multi-step journeys spanning several endpoints — each request is stateless; every step below is a
+separate HTTP call, tied together only by tokens/ids the previous step handed back.
+
+**1. Forgot password → reset it → log back in**
+
+1. `POST /profile/forgot-password` — always returns the same generic message whether or not the
+   email is registered, so the endpoint can't be used to enumerate accounts. If it is registered,
+   `reset_password_process` mints a 15-minute JWT reset token and queues an email carrying it —
+   still on FastAPI `BackgroundTasks`, the one email send this project hasn't moved onto the Celery
+   path below yet (see Known limitations).
+2. The fan reads the token from that email (or the console, in local dev where `DEBUG=true` prints
+   it instead of calling SendGrid) and calls `POST /profile/set-password` with
+   `{token, new_password}`. This revokes every existing refresh token for the account — a session
+   an attacker already held doesn't survive the reset meant to lock them out — and writes an
+   in-app `password_reset` notification.
+3. `POST /account/login` with the new password — ordinary login, a fresh access/refresh token
+   pair.
+
+**2. Add to cart → checkout → notified on two channels**
+
+1. `POST /cart/add_cart` — no side effects beyond the cart row itself.
+2. `POST /order/checkout` — locks every affected `Product` row (fixed id order, deadlock-safe),
+   checks stock and the resale cap under that lock, creates `Order`/`OrderItem`/`Payment` in one
+   commit. Only on a successful payment does that same commit also decrement stock, clear the
+   cart, and write an in-app `order_confirmation` notification; the product-list/store-page cache
+   is invalidated right after, once the commit lands.
+3. Back in the router, once `checkout()` returns without the order having been cancelled outright
+   (a declined mock payment cancels it immediately — no confirmation email for that case): an
+   `EmailTemplate.ORDER_PLACED` email is dispatched via `celery_app.send_task(...)`, off the
+   request/response cycle entirely, picked up whenever the Celery worker gets to it.
+
+**3. Lottery entry → manager-triggered draw → win → pay → ticket in hand**
+
+1. `POST /lottery_preferences/set` — the fan ranks tiers for a concert (1st VIP, 2nd Premium, …).
+2. `POST /lottery_entries/apply` — free, no cart, no payment; rejected if the fan already holds a
+   live ticket for that concert, or hasn't ranked the tier they're applying to.
+3. A manager calls `PUT /concerts/lottery-draw/{id}`, which only validates RBAC and enqueues
+   `app.tasks.lottery.draw_lottery` — the actual rank-cascade draw runs inside the Celery worker,
+   locking every affected `ticket_type`/`lottery_campaign`/`lottery_entry` row for that concert
+   before touching any of them.
+4. Per fan, the draw writes an in-app `lottery_result` notification either way, plus a
+   `lottery_payment_reminder` for winners — and, alongside those, an
+   `EmailTemplate.LOTTERY_WON`/`LOTTERY_LOST` email dispatched the same way as the order-placed one
+   above. A win also inserts a `pending_payment` Ticket row and reserves the seat
+   (`ticket_types.sold_quantity += 1`) immediately, before any money moves.
+5. The winner calls `POST /tickets/{ticket_id}/checkout` before `payment_deadline_at` — creates the
+   `Payment`, flips the ticket to `paid`, writes a `lottery_payment_confirmation` notification, and
+   dispatches an `EmailTemplate.LOTTERY_PAYMENT_CONFIRMED` email. The fan's ticket is now live.
+
 ## Under the hood: notable engineering decisions
 
 The backend README covers *what's* built; these are the *why* behind a few choices a reviewer
@@ -164,16 +215,34 @@ are explicitly allowed to do), the second caller to reach that function always f
 payment and no-ops.
 
 **Caching — invalidated on write, not just time-boxed, and validated through the real schema.**
-Redis holds two keys today (`products:list`, `products:store_page`), msgpack-serialized with a
-5-minute TTL. The TTL alone would eventually self-correct, but a purchase lowering
-`Product.quantity` used to leave the cached list stale for up to 5 minutes after a real stock
-change — fixed by having checkout (both the mock-gateway and PayPal paths) explicitly delete both
-cache keys the moment a payment actually succeeds, gated on the same success condition that gates
-the stock decrement itself, so a declined or still-pending payment never invalidates a cache that
-hasn't actually gone stale. The store-page cache is built by validating the real response Pydantic
-model and dumping *that*, rather than hand-typing a second parallel dict shape next to the schema —
-so a field renamed on the schema fails loudly the next time the cache is written, instead of
-silently drifting out of sync with what the endpoint's `response_model` actually promises.
+What started as two product-list keys now covers every unauthenticated page-shaped read and every
+manager/admin settings page: the store grid, events/members/groups grids, venues/idol-colors
+lookups, and the manager idols/idol-form/groups/events/products/product-form pages plus the
+management-company list — all msgpack-serialized with a 5-minute TTL, all invalidated on write
+rather than left to expire. The TTL alone would eventually self-correct, but a purchase lowering
+`Product.quantity`, or a manager editing a group, used to leave the cached page stale for up to 5
+minutes after the real change — fixed by having every mutating endpoint explicitly delete the
+cache key(s) it affects right after its write commits, gated on the same success condition that
+gates the underlying write itself, so a declined or still-pending write never invalidates a cache
+that hasn't actually gone stale. Two follow-on problems that only show up once caching covers more
+than one table:
+- **Cross-domain invalidation.** A group's cached page embeds a computed `member_count`; an idol
+  moving into or out of that group changes the count without touching the `groups` table at all.
+  Idol writes invalidate the groups cache too (and vice versa for the members page's group filter)
+  — same reasoning, applied wherever one cached page's numbers depend on another table's rows.
+- **Scoped keys, not one shared key.** The manager products pages are scoped by `company_id` (a
+  manager only ever sees their own company's catalog; an admin sees everything). Caching that with
+  one shared key would leak one company's cached page into another's request, or into the admin's
+  unfiltered view — so it's one Redis key per `company_id`, with invalidation clearing every
+  company's key on a write rather than computing which single one a given product write actually
+  touched (`company_id` isn't a column on `Product` itself; it's resolved indirectly through
+  `album_details`/`merch_details`, so knowing exactly which key to clear isn't cheap — clearing all
+  of them is).
+
+Every cached page is built by validating the real response Pydantic model and dumping *that*,
+rather than hand-typing a second parallel shape next to the schema — so a field renamed on the
+schema fails loudly the next time the cache is written, instead of silently drifting out of sync
+with what the endpoint's `response_model` actually promises.
 
 
 ## Tech stack
