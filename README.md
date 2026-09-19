@@ -83,6 +83,99 @@ local dev. Full, current, honestly-scoped feature list:
   External services: SendGrid (email) · PayPal Sandbox (checkout) · S3-compatible storage (images)
 ```
 
+## Data flow
+
+Two request shapes cover most of what this system does — a plain cached read, and the async
+payment flow every checkout goes through.
+
+**A cached, rate-limited read** (e.g. `GET /products/store-page`):
+
+```
+Frontend → FastAPI router
+             │
+             ├─ rate_limit() dependency: atomic Redis INCR on a route+identity key, 429 past the
+             │  limit, fails OPEN (request proceeds) if Redis itself errors
+             │
+             ├─ cache hit  → msgpack-decode the cached payload, return it — no DB query at all
+             │
+             └─ cache miss → service layer builds the response, Pydantic-validates it against the
+                real response schema, msgpack-encodes + SETEXs it with a TTL, returns it
+```
+
+**Ticket checkout with PayPal** — the flow that actually exercises concurrency, webhook handling,
+and cache invalidation together, end to end:
+
+1. Fan hits `POST /tickets/checkout` (rate-limited 3/60s per user — inventory/money, not a free
+   read). The service takes a row lock on the `ticket_type` (`SELECT ... FOR UPDATE`), checks
+   remaining stock *under that lock*, creates a `pending_payment` Ticket row, asks PayPal to create
+   an order, and commits once — no stock is decremented yet, deliberately.
+2. The frontend redirects the fan to PayPal's hosted approval page; PayPal redirects back with a
+   token once they approve.
+3. The frontend calls `POST /payment/paypal/capture/{pg_order_id}`. Independently, on no fixed
+   schedule, PayPal also calls `POST /payment/paypal/webhook` to reconcile the same payment — not a
+   bug in either path, just how PayPal's async model works — and both endpoints funnel into the
+   exact same `finalize_paypal_payment()` function rather than duplicating the logic twice.
+4. Whichever of the two calls arrives first re-acquires the row lock, checks the payment is still
+   `pending` (that check *is* the idempotency guard — no separate "have I seen this event before"
+   table needed), decrements stock, captures the payment with PayPal, marks everything paid, and
+   commits once. The call that loses that race sees a non-pending payment and quietly no-ops
+   instead of double-charging or double-issuing a ticket.
+
+The lottery side follows the same "lock, check under the lock, write, commit once" shape but with
+an extra actor: a manager's `PUT /concerts/lottery-draw/{id}` only validates RBAC and enqueues a
+Celery task (`app.tasks.lottery.draw_lottery`) rather than running the rank-cascade draw inline —
+the algorithm itself locks every affected `ticket_types`/`lottery_campaigns`/`lottery_entries` row
+for that concert before touching any of them. Full sequence diagram:
+[`database-design.md` §5.2](https://github.com/TranXuanAnh930/i-dolly-backend/blob/main/docs/database-design.md).
+
+## Under the hood: notable engineering decisions
+
+The backend README covers *what's* built; these are the *why* behind a few choices a reviewer
+skimming the code might otherwise read as either over- or under-engineered.
+
+**Concurrency — one row-locking pattern, reused everywhere money or inventory is at stake.**
+Checkout (`order_service.checkout`), ticket purchase (`ticket_service.checkout_ticket`), and the
+lottery draw (`lottery_draw_service.draw_lottery`) all follow the same shape: take a
+`with_for_update()` lock on every row the operation will read-then-write, check the business rule
+*while holding the lock*, do the writes, commit exactly once at the end — never commit partway
+through, and never check a condition before the lock that could still change before the write
+lands. The checkout path locks every affected `Product` row in a fixed order (by primary key)
+specifically so two concurrent checkouts touching an overlapping cart can't deadlock each other by
+acquiring the same two rows in opposite order.
+
+**Rate limiting — atomic by construction, fails open on purpose.**
+It's a single atomic Redis `INCR` (creates the key at 1 on first use, increments
+otherwise), with the expiry set only by whichever request just created the window. If Redis itself is
+unreachable, the limiter logs and lets the request through rather than 500ing every rate-limited
+route (36 of them, including login) — availability matters more than the limiter working during an
+outage, and failing closed wouldn't add real security anyway, since whatever caused the outage
+evades the limiter either way. Behind Render's reverse proxy, the raw connecting IP is Render's own
+edge for every visitor, which would collapse everyone into one shared bucket — fixed at the
+transport layer with uvicorn's `ProxyHeadersMiddleware` rather than hand-parsing
+`X-Forwarded-For`, since that header is client-settable and a naive parse would let an attacker
+mint a fresh rate-limit bucket on every request just by sending a new fake value.
+
+**Webhook handling — no event-id ledger, because the domain already gives idempotency for free.**
+The original plan was a `processed_webhook_events` table keyed on PayPal's event id. It turned out
+unnecessary: `finalize_paypal_payment` only ever does real work when `payment.status == pending`,
+and a payment's status only ever leaves `pending` once — so whether PayPal's webhook fires before,
+after, or instead of the frontend's own capture call, or fires the same event twice (which webhooks
+are explicitly allowed to do), the second caller to reach that function always finds a non-pending
+payment and no-ops.
+
+**Caching — invalidated on write, not just time-boxed, and validated through the real schema.**
+Redis holds two keys today (`products:list`, `products:store_page`), msgpack-serialized with a
+5-minute TTL. The TTL alone would eventually self-correct, but a purchase lowering
+`Product.quantity` used to leave the cached list stale for up to 5 minutes after a real stock
+change — fixed by having checkout (both the mock-gateway and PayPal paths) explicitly delete both
+cache keys the moment a payment actually succeeds, gated on the same success condition that gates
+the stock decrement itself, so a declined or still-pending payment never invalidates a cache that
+hasn't actually gone stale. The store-page cache is built by validating the real response Pydantic
+model and dumping *that*, rather than hand-typing a second parallel dict shape next to the schema —
+so a field renamed on the schema fails loudly the next time the cache is written, instead of
+silently drifting out of sync with what the endpoint's `response_model` actually promises.
+
+
 ## Tech stack
 
 **Backend** — FastAPI, Pydantic v2, PostgreSQL via SQLAlchemy 2.0 + Alembic, Redis
@@ -162,12 +255,6 @@ halves — treat it accordingly.
 
 Flagged as planned, not started — named here rather than designed speculatively:
 
-- **Cache & rate limiter fixes** — closing the gaps already recorded in
-  [`i-dolly-backend/README.md#known-limitations`](https://github.com/TranXuanAnh930/i-dolly-backend#known-limitations)
-  and `docs/project_status.md` (§4 item 2, item 21): swap the rate limiter's non-atomic
-  `GET`-then-`SETEX`/`INCR` sequence for one atomic `INCR`, so concurrent requests can't race past
-  the limit; fail open (not 500) when Redis itself is unreachable; handle `X-Forwarded-For`/
-  `X-Real-IP` for `ip_key` behind a reverse proxy (Render/Docker/nginx).
 - **OLAP migration** — the ETL/analytics pipeline flagged as not-yet-started in
   `i-dolly-backend/docs/project_status.md` §5: an event-sourced outbox (`domain_events`: type,
   payload, occurred_at, processed) written in the same transaction as each business event (ticket
