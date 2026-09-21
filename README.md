@@ -80,7 +80,7 @@ local dev. Full, current, honestly-scoped feature list:
                                                                      Celery worker
                                                                    (lottery draw job)
 
-  External services: SendGrid (email) · PayPal Sandbox (checkout) · S3-compatible storage (images)
+  External services: Resend (email) · PayPal Sandbox (checkout) · S3-compatible storage (images)
 ```
 
 ## Data flow
@@ -141,7 +141,7 @@ separate HTTP call, tied together only by tokens/ids the previous step handed ba
    still on FastAPI `BackgroundTasks`, the one email send this project hasn't moved onto the Celery
    path below yet (see Known limitations).
 2. The fan reads the token from that email (or the console, in local dev where `DEBUG=true` prints
-   it instead of calling SendGrid) and calls `POST /profile/set-password` with
+   it instead of calling Resend) and calls `POST /profile/set-password` with
    `{token, new_password}`. This revokes every existing refresh token for the account — a session
    an attacker already held doesn't survive the reset meant to lock them out — and writes an
    in-app `password_reset` notification.
@@ -248,7 +248,7 @@ with what the endpoint's `response_model` actually promises.
 ## Tech stack
 
 **Backend** — FastAPI, Pydantic v2, PostgreSQL via SQLAlchemy 2.0 + Alembic, Redis
-(caching + rate limiting), Celery, JWT auth, SendGrid, PayPal + a mock payment gateway, local/S3
+(caching + rate limiting), Celery, JWT auth, Resend, PayPal + a mock payment gateway, local/S3
 image storage, Docker Compose, GitHub Actions CI (ruff lint + pytest/coverage). Full detail:
 [`i-dolly-backend/README.md`](https://github.com/TranXuanAnh930/i-dolly-backend#readme).
 
@@ -311,6 +311,9 @@ mirror, since only that copy is kept current:
   `i-dolly-backend/docs/deployment.md`.
 - **Frontend**: Vercel — `vercel.json` rewrites every route to `index.html` for client-side
   routing; the deployed API URL is supplied at build time via `VITE_API_URL`.
+- **Email**: Resend, sending from a verified domain (`mail.i-dolly-app.site`, on Cloudflare
+  Registrar/DNS — DKIM, SPF-related CNAMEs, DMARC) rather than Resend's sandbox sender, so
+  verification/reset emails deliver to any recipient, not just the account owner.
 
 ## Known limitations
 
@@ -335,6 +338,11 @@ Flagged as planned, not started — named here rather than designed speculativel
   concurrent-throughput/latency numbers (checkout's stock-lock contention, the lottery draw, the
   rate limiter under burst traffic) rather than relying on `pytest`'s correctness-only coverage.
   Not started; which endpoints and load profile to target is still undecided.
+- **Custom domains on the deployed services** — `i-dolly-app.site` is owned and already verified
+  for Resend (above), but the deployed backend/frontend still sit on their platform subdomains
+  (`*.onrender.com`, `*.vercel.app`). Pointing `api.i-dolly-app.site`/`app.i-dolly-app.site` at
+  them is one CNAME + a custom-domain step on each platform's own dashboard — not done yet, tracked
+  in `i-dolly-backend/docs/project_status.md` §5.
 
 ## License
 
