@@ -58,9 +58,9 @@ own `main`.
 Idols/groups, venues/concerts, lottery-based and direct-sale ticketing, and an album/merch
 marketplace — reusing a forked e-commerce boilerplate's cart/order/payment/shipping machinery.
 Role-based access (`admin`/`manager`/`fan`, company-scoped managers), in-app notifications
-(order/ticket/lottery confirmations, lottery results, password reset), a manager-triggered lottery
-draw run as a Celery background job, and PayPal checkout alongside a mock payment gateway for
-local dev. Full, current, honestly-scoped feature list:
+(order/ticket/lottery confirmations, lottery results, manager-facing lottery draw status, password
+reset), a manager-triggered lottery draw run as a Celery background job with its own results view,
+and PayPal checkout alongside a mock payment gateway for local dev. Full, current, honestly-scoped feature list:
 [`i-dolly-backend/README.md`](https://github.com/TranXuanAnh930/i-dolly-backend#readme).
 
 ## Architecture
@@ -132,6 +132,43 @@ the algorithm itself locks every affected `ticket_types`/`lottery_campaigns`/`lo
 for that concert before touching any of them. Full sequence diagram:
 [`database-design.md` §5.2](https://github.com/TranXuanAnh930/i-dolly-backend/blob/main/docs/database-design.md).
 
+## Business logic
+
+The rules that make this an idol-ticketing platform rather than generic CRUD — enforced at the
+database layer (a Postgres trigger, `app/exception/db_triggers.py` in the backend repo translates a
+trigger's `RAISE EXCEPTION` back into a clean HTTP error) everywhere money or a scarce seat is at
+stake, not just in the API layer, so the invariant holds even against a bug or a direct DB write.
+Full detail: [`database-design.md` §4](https://github.com/TranXuanAnh930/i-dolly-backend/blob/main/docs/database-design.md)
+(RBAC/fan-only/anti-resale) and §5 (the lottery/checkout trigger-enforced rules, as sequence
+diagrams) — 8 trigger functions across the two — plus the frontend's
+[`business_logic.md`](https://github.com/TranXuanAnh930/i-dolly-frontend/blob/main/docs/business_logic.md).
+
+- **One ticket per fan per concert, across every sale path.** Bought direct, won a lottery tier, or
+  applied to a second tier hoping to trade up — a fan can hold at most one live ticket for a given
+  concert at a time. Checked in the service layer first (a clean 400/403), with a DB trigger as the
+  backstop if that check is ever bypassed.
+- **Lottery fairness: rank order first, one shot per fan, no purchase multiplier.** A fan ranks the
+  tiers they'd accept before applying; the draw processes rank 1 across every tier's campaign for a
+  concert before moving to rank 2, so no fan can win a lower-ranked tier while a higher-ranked one
+  they're still eligible for hasn't been decided yet. Winners within a rank are drawn with
+  `secrets.SystemRandom()` (CSPRNG), not `random`'s Mersenne Twister — cryptographically random,
+  not just statistically uniform.
+- **Anti-resale cap.** A category flagged `is_resale_capped` limits how many units of one product a
+  single fan can buy across their order history — enforced by a trigger on `orders_items`, not just
+  a cart-side check, so it holds even for a checkout path that skips the normal cart flow.
+- **Fan-only purchase actions.** Cart, checkout, lottery entry, and direct ticket purchase all
+  reject a manager/admin account outright — staff accounts exist to run the platform, not shop on
+  it. A 403 (authorization), not a 400 (validation), since the account and the resource are both
+  otherwise perfectly valid.
+- **Company-scoped management, not one shared admin pool.** A manager only ever sees and mutates
+  their own company's groups/idols/concerts/ticket types/lottery campaigns — enforced by a
+  `company_id` filter at the query level on every mutating/manager-facing endpoint, not just hidden
+  in the UI. Admins bypass the scope entirely.
+- **Payment idempotency as a business guarantee, not just a technical one.** A payment only ever
+  transitions out of `pending` once — whether the frontend's own capture call or PayPal's webhook
+  gets there first, the second caller always finds a non-pending payment and no-ops, so a retried or
+  duplicated request can never double-charge a fan or double-issue a ticket.
+
 ## Use case flows
 
 Multi-step journeys spanning several endpoints — each request is stateless; every step below is a
@@ -173,15 +210,16 @@ separate HTTP call, tied together only by tokens/ids the previous step handed ba
 3. A manager calls `PUT /concerts/lottery-draw/{id}`, which only validates RBAC and enqueues
    `app.tasks.lottery.draw_lottery` — the actual rank-cascade draw runs inside the Celery worker,
    locking every affected `ticket_type`/`lottery_campaign`/`lottery_entry` row for that concert
-   before touching any of them.
-4. Per fan, the draw writes an in-app `lottery_result` notification either way, plus a
-   `lottery_payment_reminder` for winners — and, alongside those, an
-   `EmailTemplate.LOTTERY_WON`/`LOTTERY_LOST` email dispatched the same way as the order-placed one
-   above. A win also inserts a `pending_payment` Ticket row and reserves the seat
-   (`ticket_types.sold_quantity += 1`) immediately, before any money moves.
+   before touching any of them. A win inserts a `pending_payment` Ticket row and reserves the seat
+   (`ticket_types.sold_quantity += 1`) immediately, before any money moves; a loss writes nothing to
+   inventory at all. (Which notifications fire around this step, and why win/loss email was cut —
+   see Under the hood.)
+4. Once the draw completes, the manager opens the lottery results view
+   (`GET /lottery_entries/concert/{concert_id}/results`) — every decided entry for the concert,
+   winner and loser alike, each row already carrying the winner's email and their ticket's payment
+   status/deadline, so no per-winner follow-up call is needed.
 5. The winner calls `POST /tickets/{ticket_id}/checkout` before `payment_deadline_at` — creates the
-   `Payment`, flips the ticket to `paid`, writes a `lottery_payment_confirmation` notification, and
-   dispatches an `EmailTemplate.LOTTERY_PAYMENT_CONFIRMED` email. The fan's ticket is now live.
+   `Payment` and flips the ticket to `paid`. The fan's ticket is now live.
 
 ## Under the hood: notable engineering decisions
 
@@ -247,6 +285,26 @@ Every cached page is built by validating the real response Pydantic model and du
 rather than hand-typing a second parallel shape next to the schema — so a field renamed on the
 schema fails loudly the next time the cache is written, instead of silently drifting out of sync
 with what the endpoint's `response_model` actually promises.
+
+**Lottery notifications — three manager-facing signals for a fire-and-forget job, and why win/loss
+email was cut.** `PUT /concerts/lottery-draw/{id}` only enqueues a Celery task and returns
+immediately — the router never gets the actual draw result back, so the only way a manager learns
+what stage a draw is in is three separate in-app notifications: `lottery_draw_triggered` (the
+moment the button is pressed), `lottery_draw_failed` (the task raised — a closed-campaign race from
+a double-click, entries not closed yet, a real bug — caught, notified, then re-raised so Celery's
+own `FAILURE` state still reflects it too, not just the notification), and `lottery_draw_completed`
+(the draw's own commit landed). None of the three carry per-winner detail — that's what the results
+view in the use case flow above is for. Fans still get an in-app `lottery_result` notification each
+way, plus `lottery_payment_reminder` for winners, but no email: `LOTTERY_WON`/`LOTTERY_LOST`
+templates existed early on and were deliberately removed once testing against real seed-fan
+addresses meant every test draw was sending real win/loss email; `lottery_payment_confirmation` (an
+actual payment succeeding) kept its email, since payment/ticket confirmation is the event actually
+worth an inbox notification here, not "how the draw came out." Separately, the Celery task's return
+value has to be `.model_dump(mode="json")`'d rather than returned as the raw `LotteryResult`
+Pydantic model — Celery's JSON result serializer can't encode an arbitrary model, and shipping the
+raw object once had the draw finish successfully in the database while Celery itself logged and
+recorded the task as a `FAILURE`, purely from that encode step failing after the real work was
+already done.
 
 
 ## Tech stack
@@ -326,6 +384,14 @@ Read each submodule's own current list rather than trusting a summary here, — 
 and its `docs/project_status.md`. In short: this is a portfolio project verified mostly through
 static analysis and targeted live-DB sessions rather than continuous production traffic, in both
 halves — treat it accordingly.
+
+One specific gap worth naming directly rather than leaving buried in that list: **no sweep job for
+expired unpaid lottery-won tickets.** A fan who wins and never pays before `payment_deadline_at`
+should have that reserved seat released back to the pool — nothing does this today. The only place
+`payment_deadline_at` is even checked is a lazy discovery inside PayPal payment finalization, which
+only fires if someone happens to hit that exact path for that exact ticket; deliberately excluded
+from this project's concurrency test suite too, since there's no sweep-job code yet to race. Full
+detail: `i-dolly-backend/docs/project_status.md` §8.
 
 ## Future work
 
