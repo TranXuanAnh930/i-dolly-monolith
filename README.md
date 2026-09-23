@@ -21,6 +21,8 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 
 **API Documentation:** https://i-dolly-backend.onrender.com/docs
 
+<img width="1913" height="1032" alt="Screenshot 2026-09-23 231913" src="https://github.com/user-attachments/assets/595bbbc1-2e78-4973-a9bd-cc41f3f73ac3" />
+
 ---
 
 ## Layout
