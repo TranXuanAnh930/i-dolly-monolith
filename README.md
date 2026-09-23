@@ -13,7 +13,9 @@ see each one's "Known limitations"/"Project status" section before assuming a fe
 
 **🚀 Live Demo** 
 
-**Frontend:** i-dolly-frontend.vercel.app
+Note: Render's free and lower-tier instances spin down after 15 minutes of inactivity, causing an initial cold-start loading time of about 30 to 50 seconds (and sometimes up to a minute) for the first incoming request. So the first time visiting the website, it can takes up around 50 seconds.  
+
+**Frontend:** https://i-dolly-frontend.vercel.app
 
 **API:** https://i-dolly-backend.onrender.com
 
