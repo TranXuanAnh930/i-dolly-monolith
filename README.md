@@ -21,7 +21,9 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 
 **API Documentation:** https://api.i-dolly-app.site/docs
 
-<img width="1913" height="1032" alt="Screenshot 2026-09-23 231913" src="https://github.com/user-attachments/assets/595bbbc1-2e78-4973-a9bd-cc41f3f73ac3" />
+<img width="1919" height="1030" alt="image" src="https://github.com/user-attachments/assets/8480700a-cecc-4360-865b-7f151fd360ec" />
+
+<img width="1918" height="1013" alt="image" src="https://github.com/user-attachments/assets/a4502c75-a702-4325-9dec-034a520b6772" />
 
 ---
 
