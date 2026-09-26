@@ -23,6 +23,7 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 
 <img width="1919" height="1030" alt="image" src="https://github.com/user-attachments/assets/8480700a-cecc-4360-865b-7f151fd360ec" />
 
+
 <img width="1918" height="1013" alt="image" src="https://github.com/user-attachments/assets/a4502c75-a702-4325-9dec-034a520b6772" />
 
 ---
@@ -31,14 +32,14 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 
 | Doc | What's inside |
 |---|---|
-| [Overview](docs/overview.md) | What the platform does, and the tech stack of each half |
-| [Architecture and data flow](docs/architecture.md) | System diagram; a cached read and the PayPal checkout flow, step by step |
-| [Business logic](docs/business-logic.md) | The rules enforced in the service layer and the database: one ticket per concert, lottery fairness, anti-resale cap, fan-only purchases, company scoping, payment idempotency |
-| [Use case flows](docs/use-case-flows.md) | Password reset, cart checkout, and lottery entry → draw → payment, endpoint by endpoint |
-| [Engineering decisions](docs/engineering-decisions.md) | Why: row locking, rate limiting, webhook idempotency, cache invalidation, lottery notifications |
-| [Running both locally](docs/local-development.md) | Backend and frontend dev setup |
-| [Deployment](docs/deployment.md) | Render, Supabase, Vercel, Cloudflare domains, Resend |
-| [Status and roadmap](docs/status-and-roadmap.md) | Known limitations and future work |
+| [Overview](docs/overview.md) | Domains and their tables, roles, features, tech stack with versions |
+| [Architecture and data flow](docs/architecture.md) | System diagram, backend layering, cached reads, mock and PayPal checkout, the lottery draw |
+| [Business logic](docs/business-logic.md) | Every rule and whether a database trigger backs it up, the lottery algorithm, status lifecycles |
+| [Use case flows](docs/use-case-flows.md) | Six journeys endpoint by endpoint: password reset, checkout, lottery, direct-sale ticket, concert setup, shipping |
+| [Engineering decisions](docs/engineering-decisions.md) | Why: row and share locks, trigger backstops, sync handlers, rate limiting, webhooks, caching, notifications, soft deletes |
+| [Running both locally](docs/local-development.md) | Setup, `.env` essentials, ports, seed data, running tests |
+| [Deployment](docs/deployment.md) | What runs where, DNS records, cross-service settings, CI/CD |
+| [Status and roadmap](docs/status-and-roadmap.md) | Known limitations, how it's tested, open issues, future work |
 
 ## Layout
 
