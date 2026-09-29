@@ -1,6 +1,6 @@
 # アーキテクチャとデータフロー
 
-[← README に戻る](../README.md)
+[← README に戻る](../README_JP.md)
 
 ## システム構成
 

@@ -1,6 +1,6 @@
 # デプロイ
 
-[← README に戻る](../README.md)
+[← README に戻る](../README_JP.md)
 
 手順ごとのセットアップ、環境変数の一覧、デプロイ後の確認事項はバックエンドの
 [`deployment.md`](https://github.com/TranXuanAnh930/i-dolly-backend/blob/main/docs/deployment.md)

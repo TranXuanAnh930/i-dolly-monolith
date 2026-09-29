@@ -1,6 +1,6 @@
 # 現状とロードマップ
 
-[← README に戻る](../README.md)
+[← README に戻る](../README_JP.md)
 
 ## 既知の制限事項
 

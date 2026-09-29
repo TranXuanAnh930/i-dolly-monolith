@@ -1,5 +1,7 @@
 # i-dolly-monolith
 
+English | [日本語](README_JP.md)
+
 Umbrella repo for **I-Dolly** — an idol-concert **ticket reservation** platform with an
 **album/singles marketplace**, built as a project to showcase full-stack engineering:
 backend schema design/layered architecture/migration discipline/RBAC, and a Vue 3 SPA consuming
