@@ -13,6 +13,7 @@ skimming the code might otherwise read as either over- or under-engineered.
 - [Caching](#caching)
 - [Lottery notifications](#lottery-notifications)
 - [Soft deletes](#soft-deletes)
+- [Contact form and AI answers](#contact-form)
 
 <a id="concurrency"></a>
 **Concurrency — one row-locking pattern, reused everywhere money or inventory is at stake.**
@@ -47,8 +48,8 @@ list is in [Business logic](business-logic.md#rules-and-where-theyre-enforced).
 
 <a id="sync-handlers"></a>
 **Synchronous route handlers, on purpose.** Every route handler is a plain `def`, not
-`async def`. The stack below them — SQLAlchemy sessions, bcrypt, the PayPal HTTP client, boto3 — is
-synchronous, and FastAPI runs `def` handlers in a threadpool, so a slow database query or PayPal
+`async def`. The stack below them — SQLAlchemy sessions, bcrypt, the PayPal HTTP client, boto3, the
+Claude API client — is synchronous, and FastAPI runs `def` handlers in a threadpool, so a slow database query or PayPal
 call only occupies one worker thread. The same code inside `async def` would run on the event loop
 and stall every other request in the process; in a small standalone benchmark, five concurrent
 one-second blocking requests took 5 s under `async def` versus 1 s under `def`. The one step that really is async, reading the raw PayPal webhook
@@ -59,7 +60,7 @@ body, is an async dependency that the synchronous handler receives as bytes.
 Each request increments a Redis counter keyed by the route template plus either the user id or the
 client IP (`INCR`, with the expiry set by the request that created the window). If Redis itself is
 unreachable, the limiter logs and lets the request through rather than 500ing every rate-limited
-route (62 of them, including login) — availability matters more than the limiter working during an
+route (68 of them, including login) — availability matters more than the limiter working during an
 outage, and failing closed wouldn't add real security anyway, since whatever caused the outage
 evades the limiter either way. Two known gaps (backend `docs/bugs.md`): the increment and the expiry
 are two separate Redis calls, so a crash between them could leave a counter that never expires
@@ -155,3 +156,29 @@ concert credits and products all reference them, and a hard delete would either 
 history or orphan it. Deactivated artists disappear from public pages but stay loadable in manager
 forms so they can be reactivated. Products don't follow this rule yet — deleting one still cascades
 into past order lines (backend `docs/bugs.md` #2).
+
+<a id="contact-form"></a>
+**Contact form and AI answers — saved first, never echoed, and never able to break the page.**
+- **Save, then email.** Every inquiry is written to `inquiries` before its confirmation email is
+  queued, so a failed email never loses a question.
+- **The confirmation can't be used to send spam.** It goes to whatever address was typed into the
+  form, so it's a way to make our domain email a stranger. It therefore never includes the user's
+  text, only the topic label and a reference id; otherwise anyone could send their own message
+  from our address to any inbox. One address also receives at most 3 confirmations an hour, on top
+  of the route's limit of 3 submissions per 10 minutes. Past the per-address cap the inquiry is
+  still saved; only the email is skipped.
+- **FAQ-bound answers, not open chat.** The instant answer comes only from a FAQ file written for
+  the site (English and Japanese versions), and Claude returns structured output
+  (`answerable_from_faq`, `answer`) instead of free text, so the page shows an answer only when
+  the FAQ actually covers the question. The prompt forbids promising refunds or exceptions and
+  treats the user's message as a question, not instructions. The model has no tools and no access
+  to account data, so a prompt-injection attempt can at worst produce one bad paragraph.
+- **It can't break the page.** A missing API key, `DEBUG` mode, a refusal, a cut-off answer, a
+  timeout and an API error all come back as `answerable: false`, and the contact form still works.
+- **Cheapest model, no prompt caching.** Claude Haiku 4.5, with a short timeout and one retry. Its
+  minimum cacheable prompt is 4,096 tokens and the FAQ prompt is smaller. Even with a longer FAQ, a
+  low-traffic site would mostly miss the cache's 5-minute window and pay the cache-write premium
+  for nothing.
+- **Tests can't spend money.** Unit tests fake the Claude client wherever the call would run, so
+  no test can make a real, billed request whatever key is in `.env`. It's the same lesson as when
+  unit tests once sent real emails.

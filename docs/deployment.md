@@ -19,6 +19,7 @@ this page is the map.
 | Email | Resend | sends from `mail.i-dolly-app.site` |
 | DNS and domain | Cloudflare Registrar and DNS | `i-dolly-app.site` |
 | Payments | PayPal | sandbox mode |
+| AI answers (contact page) | Anthropic Claude API | Claude Haiku 4.5 · optional |
 
 - **Backend**: the Docker image runs `alembic upgrade head` before starting uvicorn, so every
   deploy applies pending migrations first. The worker runs the same image with a Celery command
@@ -55,7 +56,8 @@ All web records are **DNS only** (grey cloud): Vercel and Render issue their own
 | Render (API + worker) | `FRONTEND_BASE_URL` | `https://i-dolly-app.site` — used in reset links and PayPal return/cancel URLs |
 | Render (API + worker) | `CORS_ORIGINS` | the apex, `www` and the old `vercel.app` address |
 | Render (API + worker) | `FROM_EMAIL` | `noreply@mail.i-dolly-app.site` |
-| Render (API + worker) | `DEBUG` | unset or `false`, so emails are sent rather than printed to the logs |
+| Render (API + worker) | `DEBUG` | unset or `false`, so emails are sent rather than printed to the logs, and contact-page questions reach Claude |
+| Render (API) | `ANTHROPIC_API_KEY` | a Claude API key; unset turns the contact page's instant answers off (the worker doesn't need it) |
 | Vercel | `VITE_API_URL` | `https://api.i-dolly-app.site` |
 | PayPal dashboard | Webhook URL | the API's `/payment/paypal/webhook`; its id goes in `PAYPAL_WEBHOOK_ID` |
 

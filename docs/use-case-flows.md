@@ -13,6 +13,7 @@ separate HTTP call, tied together only by tokens/ids the previous step handed ba
 | 4 | [Buy a direct-sale ticket](#4-buy-a-direct-sale-ticket) | Fan |
 | 5 | [Set up a concert for sale](#5-set-up-a-concert-for-sale) | Manager |
 | 6 | [Ship an order](#6-ship-an-order) | Manager |
+| 7 | [Ask a question → instant FAQ answer → contact form](#7-ask-a-question--instant-faq-answer--contact-form) | Fan or guest |
 
 ### 1. Forgot password → reset it → log back in
 
@@ -114,3 +115,30 @@ A manager can only do this for their own company; an admin can do it for any com
 
 Known gap: shipping doesn't yet check that the order was actually paid, so an unpaid PayPal order
 can be marked shipped (backend `docs/bugs.md` #26).
+
+### 7. Ask a question → instant FAQ answer → contact form
+
+Guests and logged-in fans both use the `/contact` page; managers and admins don't see it. A
+logged-in user's requests carry their token, so they're rate-limited per account instead of per
+IP, and a submitted inquiry is linked to the account.
+
+1. The user picks a topic (tickets, lottery, orders, payment, account, other) and writes the
+   question: 5–2,000 characters, since a complete Japanese question can be very short.
+2. Optionally, `POST /inquiries/instant-answer` (5 requests per 10 minutes) with the topic, the
+   question and the site language (`en`/`ja`). Nothing is saved. The backend sends the question
+   and the FAQ for that language (`app/content/faq.md` or `faq.ja.md`) to Claude Haiku 4.5, and
+   gets back structured output: whether the FAQ covers the question, and an answer. Claude replies
+   in the language of the question.
+   - Covered: the page shows the answer, labelled as AI-generated, and asks whether it helped.
+     "Yes" ends the flow; nothing is sent.
+   - Anything else (not covered, no API key configured, `DEBUG` on, a refusal, a cut-off answer, a
+     timeout or an API error): `answerable: false`, and the page just keeps the form. This step
+     never shows an error.
+3. `POST /inquiries/submit` (3 requests per 10 minutes) with an email, the topic and the question.
+   The inquiry is saved to `inquiries`, then a confirmation email is queued through Celery like
+   every other email. It shows only the topic and a reference id, never the user's text, and one
+   address receives at most 3 per hour; past that the inquiry is still saved, just without an
+   email. The page shows the reference id.
+
+Known gaps: nobody on the site side is notified when an inquiry arrives, and there's no staff view
+yet, so inquiries are only visible in the database. The confirmation email is English-only.

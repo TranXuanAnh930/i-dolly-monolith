@@ -69,9 +69,16 @@ Flagged as planned, not started — named here rather than designed speculativel
   notification type already exists in the backend, but nothing sends it yet; it needs a scheduled
   job that finds upcoming concerts and notifies each fan holding a paid ticket, in-app and possibly
   by email. How far ahead to remind, and on which channels, is still undecided.
-- **Contact (お問い合わせ) emails on the project domain** — a contact form whose inquiries reach an
-  address on `i-dolly-app.site` (for example `support@i-dolly-app.site`). Cloudflare Email Routing
-  can receive and forward mail for the domain but can't send it, so incoming inquiries would be
-  forwarded to an inbox, and any automatic acknowledgement to the sender would go out through
-  Resend, like the app's other emails. The address, form fields and spam protection are still
-  undecided.
+- **Contact (お問い合わせ): the staff side.** The form itself is built: questions are saved, the
+  sender gets a confirmation through Resend, and an instant answer from the FAQ comes first (see
+  [use case flow 7](use-case-flows.md#7-ask-a-question--instant-faq-answer--contact-form)). It
+  isn't merged or deployed yet, and the AI answers haven't been run against the real Claude API.
+  Still missing:
+  - **Getting inquiries to a person.** Nobody is notified when one arrives and there's no staff
+    view. One option is forwarding to an address on `i-dolly-app.site` (for example
+    `support@i-dolly-app.site`) through Cloudflare Email Routing, which can receive and forward
+    mail for the domain but can't send it; replies would still go out through Resend. The other is
+    an admin inbox page in the app.
+  - **FAQ policies.** Refunds, ticket transfers, venue entry, shipping fees and payment methods
+    aren't decided anywhere yet, so the FAQ (and therefore the AI) can't answer them.
+  - **A Japanese confirmation email.** It's English-only today, like every other email.

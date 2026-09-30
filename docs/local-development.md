@@ -25,9 +25,10 @@ Before the first start, edit `.env`:
 |---|---|
 | `JWT_SECRET_KEY`, `JWT_REFRESH_SECRET_KEY`, `JWT_EMAIL_SECRET_KEY` | Three different random values: `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `DATABASE_URL`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PWD` | Matching values; the host in `DATABASE_URL` stays `postgres` (the compose service name) |
-| `DEBUG` | `true` to print emails (including verification and reset links) to the console instead of sending them through Resend. It defaults to `false`. |
+| `DEBUG` | `true` to print emails (including verification and reset links) to the console instead of sending them through Resend. Contact-page questions are also printed instead of being sent to Claude. It defaults to `false`. |
 | `RESEND_API_KEY`, `FROM_EMAIL` | Any placeholder when `DEBUG=true`; a real key and a verified-domain address to actually send |
 | `PAYPAL_*` | Optional. Leave empty and use the mock gateway, or add PayPal sandbox credentials |
+| `ANTHROPIC_API_KEY` | Optional. Leave unset to turn off the contact page's instant answers, or add a Claude API key from the Claude Console. With a key and `DEBUG=false`, each question is a real, billed call (a fraction of a cent on Haiku 4.5) |
 
 `docker compose up` starts four containers and runs the database migrations on boot:
 

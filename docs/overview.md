@@ -23,15 +23,15 @@ model, schema) follows the same split.
 | **Talent** | `management_companies`, `groups`, `idols`, `idol_colors`, `positions`, `idol_positions` | Agencies and their artists. Groups and idols are soft-deleted (`is_active`) so concert and product history survives |
 | **Events & ticketing** | `venues`, `concerts`, `concert_performers`, `ticket_types`, `direct_sale_campaigns`, `lottery_campaigns`, `lottery_preferences`, `lottery_entries`, `tickets` | Concerts with capacity-based ticket tiers, sold either directly (in a sale window) or by lottery |
 | **Marketplace** | `products`, `categories`, `album_details`, `merch_details`, `genres`, `album_genres`, `cart`, `orders`, `orders_items`, `payment`, `shipping_addresses`, `shipping_status` | Albums/singles/EPs and official merch: cart → checkout → payment → shipping |
-| **Shared** | `notifications` | In-app notifications for fans and managers |
+| **Shared** | `notifications`, `inquiries` | In-app notifications for fans and managers; contact-form questions |
 
-30 tables in total, built by one linear chain of Alembic migrations.
+31 tables in total, built by one linear chain of Alembic migrations.
 
 ## Roles
 
 | Role | Can do |
 |---|---|
-| **fan** | Browse everything; rank lottery tiers and apply; buy direct-sale tickets and pay for lottery wins; cart and checkout; read their own orders, tickets and notifications |
+| **fan** | Browse everything; rank lottery tiers and apply; buy direct-sale tickets and pay for lottery wins; cart and checkout; read their own orders, tickets and notifications; ask questions through the contact page (guests can too) |
 | **manager** | Belongs to one management company. Create and edit that company's groups, idols, concerts, ticket types, campaigns and products; trigger the lottery draw and view its results; view the company's orders and mark them shipped; view ticket and product sales |
 | **admin** | Everything a manager can do, for every company; manage companies, venues and categories; create manager accounts and promote admins |
 
@@ -57,8 +57,12 @@ UI. Details: [Business logic](business-logic.md).
 - **Email:** Resend, sent from a Celery task so requests never wait on delivery.
 - **Images:** idol and product uploads go to the local filesystem in development and to
   S3-compatible storage in production.
+- **Contact page (お問い合わせ):** a question can first get an instant answer, written by Claude
+  Haiku 4.5 using only the site FAQ (English or Japanese). If that doesn't help, the question is
+  saved and a confirmation email goes to the sender. See
+  [Use case flows](use-case-flows.md#7-ask-a-question--instant-faq-answer--contact-form).
 - **Performance and abuse protection:** Redis cache for public and manager page bundles; Redis
-  rate limiting on 62 routes.
+  rate limiting on 68 routes.
 
 ## Tech stack
 
@@ -68,7 +72,7 @@ UI. Details: [Business logic](business-logic.md).
 | Database | PostgreSQL (Supabase in production), SQLAlchemy 2.0, Alembic 1.17 |
 | Cache, rate limiting, queue | Redis (msgpack-serialized cache); Celery 5.6 with Redis as broker and result backend |
 | Auth | JWT (python-jose, HS256), bcrypt via passlib |
-| Integrations | PayPal REST API (httpx), Resend, boto3 for S3-compatible storage |
+| Integrations | PayPal REST API (httpx), Resend, boto3 for S3-compatible storage, Anthropic Claude API (`anthropic` SDK, Claude Haiku 4.5) |
 | Tests and CI | pytest — unit tests with an in-memory fake Redis, integration tests against real Postgres and Redis; ruff; GitHub Actions; Codecov |
 | Frontend | Vue 3, Vite 5, Pinia, Vue Router 4, vue-i18n (`en`/`ja`), Axios, Sass |
 | Hosting | Render (API, Celery worker, Key Value/Redis), Supabase, Vercel, Cloudflare DNS |

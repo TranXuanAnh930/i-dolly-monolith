@@ -35,8 +35,8 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 | [Overview](docs/overview.md) | Domains and their tables, roles, features, tech stack with versions |
 | [Architecture and data flow](docs/architecture.md) | System diagram, backend layering, cached reads, mock and PayPal checkout, the lottery draw |
 | [Business logic](docs/business-logic.md) | Every rule and whether a database trigger backs it up, the lottery algorithm, status lifecycles |
-| [Use case flows](docs/use-case-flows.md) | Six journeys endpoint by endpoint: password reset, checkout, lottery, direct-sale ticket, concert setup, shipping |
-| [Engineering decisions](docs/engineering-decisions.md) | Why: row and share locks, trigger backstops, sync handlers, rate limiting, webhooks, caching, notifications, soft deletes |
+| [Use case flows](docs/use-case-flows.md) | Seven journeys endpoint by endpoint: password reset, checkout, lottery, direct-sale ticket, concert setup, shipping, contact form |
+| [Engineering decisions](docs/engineering-decisions.md) | Why: row and share locks, trigger backstops, sync handlers, rate limiting, webhooks, caching, notifications, soft deletes, contact form and AI answers |
 | [Running both locally](docs/local-development.md) | Setup, `.env` essentials, ports, seed data, running tests |
 | [Deployment](docs/deployment.md) | What runs where, DNS records, cross-service settings, CI/CD |
 | [Status and roadmap](docs/status-and-roadmap.md) | Known limitations, how it's tested, open issues, future work |

@@ -30,6 +30,7 @@
 
   External: PayPal (sandbox checkout + webhooks) · Resend (email from mail.i-dolly-app.site)
             · S3-compatible storage (idol/product images)
+            · Anthropic Claude API (FAQ answers on the contact page)
 ```
 
 The frontend and backend are separate deployments that only talk over HTTP. The API lives on a
@@ -49,8 +50,8 @@ Every feature follows the same three layers, inside a domain package (`identity/
 
 Cross-cutting pieces:
 
-- **Route handlers are plain `def`.** SQLAlchemy, bcrypt, PayPal and boto3 calls are all
-  synchronous, so FastAPI runs each handler in its threadpool instead of on the event loop. The one
+- **Route handlers are plain `def`.** SQLAlchemy, bcrypt, PayPal, boto3 and Claude API calls are
+  all synchronous, so FastAPI runs each handler in its threadpool instead of on the event loop. The one
   genuinely async step, reading the raw PayPal webhook body, is an async dependency.
 - **Two error channels, one router pattern.** Service rule violations raise `ServiceError`
   subclasses. Database-trigger rejections are translated into `TriggerViolationError` subclasses by
