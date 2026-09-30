@@ -69,6 +69,7 @@ Flagged as planned, not started — named here rather than designed speculativel
   notification type already exists in the backend, but nothing sends it yet; it needs a scheduled
   job that finds upcoming concerts and notifies each fan holding a paid ticket, in-app and possibly
   by email. How far ahead to remind, and on which channels, is still undecided.
+<<<<<<< HEAD
 - **Contact (お問い合わせ): the staff side.** The form itself is built: questions are saved, the
   sender gets a confirmation through Resend, and an instant answer from the FAQ comes first (see
   [use case flow 7](use-case-flows.md#7-ask-a-question--instant-faq-answer--contact-form)). It
@@ -82,3 +83,11 @@ Flagged as planned, not started — named here rather than designed speculativel
   - **FAQ policies.** Refunds, ticket transfers, venue entry, shipping fees and payment methods
     aren't decided anywhere yet, so the FAQ (and therefore the AI) can't answer them.
   - **A Japanese confirmation email.** It's English-only today, like every other email.
+=======
+- **Getting contact inquiries to staff** — the contact form (お問い合わせ) itself is built (see
+  Overview), but inquiries are only saved to the database: there's no staff-facing read path, and
+  nobody is notified when one arrives. One option is forwarding each inquiry to an address on
+  `i-dolly-app.site` (for example `support@i-dolly-app.site`) through Cloudflare Email Routing,
+  which can receive and forward mail for the domain but can't send it. Which route to take, and
+  the address, are still undecided.
+>>>>>>> 234c0b4389bdc4df614b66e2fa1dfa3b37c2124f

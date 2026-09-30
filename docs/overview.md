@@ -55,6 +55,14 @@ UI. Details: [Business logic](business-logic.md).
   result, payment reminder and payment confirmation, manager-facing draw triggered / completed /
   failed, and password reset. (`event_reminder` is defined, but nothing sends it yet.)
 - **Email:** Resend, sent from a Celery task so requests never wait on delivery.
+- **Contact page (お問い合わせ):** a contact form open to guests and signed-in users. Each inquiry is
+  saved and the sender gets a confirmation email that carries only the topic and a reference id,
+  never their own text, capped at 3 per address per hour. Staff can't read inquiries in the app
+  yet (see [Status and roadmap](status-and-roadmap.md)).
+- **FAQ instant answers:** before sending the form, a fan's question can be answered from the site
+  FAQ (English or Japanese) by the Claude API (`claude-haiku-4-5`). It answers only from the FAQ
+  and otherwise returns "not answerable", so the contact form is always the fallback. Implemented
+  and unit-tested, but not yet run against the real API.
 - **Images:** idol and product uploads go to the local filesystem in development and to
   S3-compatible storage in production.
 - **Contact page (お問い合わせ):** a question can first get an instant answer, written by Claude
