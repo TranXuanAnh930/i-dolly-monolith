@@ -23,9 +23,9 @@
 | **Talent** | `management_companies`、`groups`、`idols`、`idol_colors`、`positions`、`idol_positions` | 事務所とそのアーティスト。公演や商品の履歴が残るよう、グループとアイドルは論理削除（`is_active`） |
 | **Events & ticketing** | `venues`、`concerts`、`concert_performers`、`ticket_types`、`direct_sale_campaigns`、`lottery_campaigns`、`lottery_preferences`、`lottery_entries`、`tickets` | キャパシティに基づくチケットティアを持つ公演。一般販売（販売期間内）または抽選で販売 |
 | **Marketplace** | `products`、`categories`、`album_details`、`merch_details`、`genres`、`album_genres`、`cart`、`orders`、`orders_items`、`payment`、`shipping_addresses`、`shipping_status` | アルバム／シングル／EP と公式グッズ: カート → 購入手続き → 支払い → 配送 |
-| **Shared** | `notifications` | ファンとマネージャー向けのアプリ内通知 |
+| **Shared** | `notifications`、`inquiries` | ファンとマネージャー向けのアプリ内通知、お問い合わせフォームの問い合わせ |
 
-合計 30 テーブルで、1 本の直線的な Alembic マイグレーションチェーンで構築されています。
+合計 31 テーブルで、1 本の直線的な Alembic マイグレーションチェーンで構築されています。
 
 ## ロール
 
@@ -55,6 +55,14 @@
   マネージャー向けの抽選開始／完了／失敗、パスワードリセット。（`event_reminder` は定義されていますが、
   まだ送信する処理はありません。）
 - **メール:** Resend を使用し、Celery タスクから送信するため、リクエストが配信を待つことはありません。
+- **お問い合わせページ:** ゲストとログイン済みユーザーの両方が使えるお問い合わせフォーム。問い合わせは
+  保存され、送信者には確認メールが届きます。確認メールにはトピックと受付番号のみを含め、本人が入力した
+  本文は含めません。送信はアドレスごとに 1 時間あたり 3 通までです。スタッフがアプリ内で問い合わせを
+  閲覧する手段はまだありません（[現状とロードマップ](status-and-roadmap_JP.md)を参照）。
+- **FAQ 即時回答:** フォームを送信する前に、ファンの質問にサイトの FAQ（英語または日本語）をもとに
+  Claude API（`claude-haiku-4-5`）が回答します。FAQ の内容だけから回答し、それ以外は「回答不可」を返すため、
+  常にお問い合わせフォームが代替手段になります。実装とユニットテストは済んでいますが、実際の API では
+  まだ動かしていません。
 - **画像:** アイドルと商品のアップロードは、開発環境ではローカルファイルシステムに、本番環境では
   S3 互換ストレージに保存されます。
 - **パフォーマンスと不正利用対策:** 公開ページとマネージャーページのデータ一式に対する Redis キャッシュ、
@@ -68,7 +76,7 @@
 | データベース | PostgreSQL（本番は Supabase）、SQLAlchemy 2.0、Alembic 1.17 |
 | キャッシュ、レート制限、キュー | Redis（msgpack でシリアライズしたキャッシュ）、Redis をブローカーと結果バックエンドに使う Celery 5.6 |
 | 認証 | JWT（python-jose、HS256）、passlib 経由の bcrypt |
-| 外部連携 | PayPal REST API（httpx）、Resend、S3 互換ストレージ用の boto3 |
+| 外部連携 | PayPal REST API（httpx）、Resend、Anthropic Claude API（FAQ 回答）、S3 互換ストレージ用の boto3 |
 | テストと CI | pytest — インメモリのフェイク Redis を使うユニットテスト、実際の Postgres と Redis に対する統合テスト。ruff、GitHub Actions、Codecov |
 | フロントエンド | Vue 3、Vite 5、Pinia、Vue Router 4、vue-i18n（`en`/`ja`）、Axios、Sass |
 | ホスティング | Render（API、Celery ワーカー、Key Value/Redis）、Supabase、Vercel、Cloudflare DNS |

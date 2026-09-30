@@ -69,9 +69,9 @@ Flagged as planned, not started — named here rather than designed speculativel
   notification type already exists in the backend, but nothing sends it yet; it needs a scheduled
   job that finds upcoming concerts and notifies each fan holding a paid ticket, in-app and possibly
   by email. How far ahead to remind, and on which channels, is still undecided.
-- **Contact (お問い合わせ) emails on the project domain** — a contact form whose inquiries reach an
-  address on `i-dolly-app.site` (for example `support@i-dolly-app.site`). Cloudflare Email Routing
-  can receive and forward mail for the domain but can't send it, so incoming inquiries would be
-  forwarded to an inbox, and any automatic acknowledgement to the sender would go out through
-  Resend, like the app's other emails. The address, form fields and spam protection are still
-  undecided.
+- **Getting contact inquiries to staff** — the contact form (お問い合わせ) itself is built (see
+  Overview), but inquiries are only saved to the database: there's no staff-facing read path, and
+  nobody is notified when one arrives. One option is forwarding each inquiry to an address on
+  `i-dolly-app.site` (for example `support@i-dolly-app.site`) through Cloudflare Email Routing,
+  which can receive and forward mail for the domain but can't send it. Which route to take, and
+  the address, are still undecided.

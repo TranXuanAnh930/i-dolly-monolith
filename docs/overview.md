@@ -23,9 +23,9 @@ model, schema) follows the same split.
 | **Talent** | `management_companies`, `groups`, `idols`, `idol_colors`, `positions`, `idol_positions` | Agencies and their artists. Groups and idols are soft-deleted (`is_active`) so concert and product history survives |
 | **Events & ticketing** | `venues`, `concerts`, `concert_performers`, `ticket_types`, `direct_sale_campaigns`, `lottery_campaigns`, `lottery_preferences`, `lottery_entries`, `tickets` | Concerts with capacity-based ticket tiers, sold either directly (in a sale window) or by lottery |
 | **Marketplace** | `products`, `categories`, `album_details`, `merch_details`, `genres`, `album_genres`, `cart`, `orders`, `orders_items`, `payment`, `shipping_addresses`, `shipping_status` | Albums/singles/EPs and official merch: cart → checkout → payment → shipping |
-| **Shared** | `notifications` | In-app notifications for fans and managers |
+| **Shared** | `notifications`, `inquiries` | In-app notifications for fans and managers; contact-form inquiries |
 
-30 tables in total, built by one linear chain of Alembic migrations.
+31 tables in total, built by one linear chain of Alembic migrations.
 
 ## Roles
 
@@ -55,6 +55,14 @@ UI. Details: [Business logic](business-logic.md).
   result, payment reminder and payment confirmation, manager-facing draw triggered / completed /
   failed, and password reset. (`event_reminder` is defined, but nothing sends it yet.)
 - **Email:** Resend, sent from a Celery task so requests never wait on delivery.
+- **Contact page (お問い合わせ):** a contact form open to guests and signed-in users. Each inquiry is
+  saved and the sender gets a confirmation email that carries only the topic and a reference id,
+  never their own text, capped at 3 per address per hour. Staff can't read inquiries in the app
+  yet (see [Status and roadmap](status-and-roadmap.md)).
+- **FAQ instant answers:** before sending the form, a fan's question can be answered from the site
+  FAQ (English or Japanese) by the Claude API (`claude-haiku-4-5`). It answers only from the FAQ
+  and otherwise returns "not answerable", so the contact form is always the fallback. Implemented
+  and unit-tested, but not yet run against the real API.
 - **Images:** idol and product uploads go to the local filesystem in development and to
   S3-compatible storage in production.
 - **Performance and abuse protection:** Redis cache for public and manager page bundles; Redis
@@ -68,7 +76,7 @@ UI. Details: [Business logic](business-logic.md).
 | Database | PostgreSQL (Supabase in production), SQLAlchemy 2.0, Alembic 1.17 |
 | Cache, rate limiting, queue | Redis (msgpack-serialized cache); Celery 5.6 with Redis as broker and result backend |
 | Auth | JWT (python-jose, HS256), bcrypt via passlib |
-| Integrations | PayPal REST API (httpx), Resend, boto3 for S3-compatible storage |
+| Integrations | PayPal REST API (httpx), Resend, Anthropic Claude API (FAQ answers), boto3 for S3-compatible storage |
 | Tests and CI | pytest — unit tests with an in-memory fake Redis, integration tests against real Postgres and Redis; ruff; GitHub Actions; Codecov |
 | Frontend | Vue 3, Vite 5, Pinia, Vue Router 4, vue-i18n (`en`/`ja`), Axios, Sass |
 | Hosting | Render (API, Celery worker, Key Value/Redis), Supabase, Vercel, Cloudflare DNS |
