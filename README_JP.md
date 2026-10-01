@@ -43,7 +43,7 @@ CI、デプロイ先を持っています。このファイルはレビュアー
 | [ビジネスロジック](docs/business-logic_JP.md) | すべてのルールとデータベーストリガーによる保険の有無、抽選アルゴリズム、ステータスのライフサイクル |
 | [ユースケースフロー](docs/use-case-flows_JP.md) | エンドポイントごとの 6 つの流れ: パスワードリセット、購入手続き、抽選、一般販売チケット、公演の準備、発送 |
 | [エンジニアリング上の判断](docs/engineering-decisions_JP.md) | 理由: 行ロックと共有ロック、トリガーによる保険、同期ハンドラー、レート制限、Webhook、キャッシュ、通知、論理削除 |
-| [ローカルでの実行](docs/local-development_JP.md) | セットアップ、`.env` の要点、ポート、シードデータ、テストの実行 |
+| [ローカルでの実行](docs/local-development_JP.md) | 両アプリを 1 コマンドで起動する Docker 構成、`.env` の要点、ポート、シードデータ、テストの実行 |
 | [デプロイ](docs/deployment_JP.md) | 各コンポーネントの配置、DNS レコード、サービス間の設定、CI/CD |
 | [現状とロードマップ](docs/status-and-roadmap_JP.md) | 既知の制限事項、テスト方法、未解決の課題、今後の取り組み |
 
@@ -72,6 +72,16 @@ git submodule update --init --recursive
 各サブモジュールはそれぞれのリポジトリの特定のコミットに固定されています — そのサブモジュール自身の
 `main` から最新を取得するには `git submodule update --remote` を実行します（サブモジュール内で、または
 トップレベルで `--remote` を付けて）。
+
+### Docker ですべてを起動する
+
+```bash
+cp i-dolly-backend/.env.example i-dolly-backend/.env   # その後シークレットを設定
+docker compose up --build
+```
+
+フロントエンドは `http://localhost:8080`、API ドキュメントは `http://localhost:8000/docs` です。
+`.env` の設定、シードデータ、テストについては [ローカルでの実行](docs/local-development_JP.md) を参照してください。
 
 ## サブモジュールのドキュメント
 

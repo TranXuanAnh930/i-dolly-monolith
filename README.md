@@ -39,7 +39,7 @@ Note: Render's free and lower-tier instances spin down after 15 minutes of inact
 | [Business logic](docs/business-logic.md) | Every rule and whether a database trigger backs it up, the lottery algorithm, status lifecycles |
 | [Use case flows](docs/use-case-flows.md) | Seven journeys endpoint by endpoint: password reset, checkout, lottery, direct-sale ticket, concert setup, shipping, contact form |
 | [Engineering decisions](docs/engineering-decisions.md) | Why: row and share locks, trigger backstops, sync handlers, rate limiting, webhooks, caching, notifications, soft deletes, contact form and AI answers |
-| [Running both locally](docs/local-development.md) | Setup, `.env` essentials, ports, seed data, running tests |
+| [Running both locally](docs/local-development.md) | One-command Docker setup for both apps, `.env` essentials, ports, seed data, running tests |
 | [Deployment](docs/deployment.md) | What runs where, DNS records, cross-service settings, CI/CD |
 | [Status and roadmap](docs/status-and-roadmap.md) | Known limitations, how it's tested, open issues, future work |
 
@@ -68,6 +68,16 @@ git submodule update --init --recursive
 Each submodule is pinned to a specific commit of its own repo — `git submodule update --remote`
 (inside a submodule, or with `--remote` at the top level) to pull the latest from that submodule's
 own `main`.
+
+### Run everything with Docker
+
+```bash
+cp i-dolly-backend/.env.example i-dolly-backend/.env   # then fill in the secrets
+docker compose up --build
+```
+
+The frontend is at `http://localhost:8080` and the API docs at `http://localhost:8000/docs`. See
+[Running both locally](docs/local-development.md) for the `.env` settings, seed data and tests.
 
 ## Submodule documentation
 
