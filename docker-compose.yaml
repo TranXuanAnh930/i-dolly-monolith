@@ -3,30 +3,9 @@
 #
 #   docker compose up --build
 #
-# The backend services come from the backend submodule's own compose file, so there is one
-# definition to maintain. Its ${DATABASE_*} variables are read from i-dolly-backend/.env.
+# Both apps come from their submodule's own compose file, so each is defined in one place. The
+# backend's ${DATABASE_*} variables are read from i-dolly-backend/.env.
 include:
   - path: i-dolly-backend/docker-compose.yaml
     env_file: i-dolly-backend/.env
-
-services:
-  frontend:
-    build:
-      context: i-dolly-frontend
-      dockerfile: ../docker/frontend.Dockerfile
-    container_name: i-dolly-frontend
-    restart: unless-stopped
-    ports:
-      - 8080:8080
-    environment:
-      # The browser calls the API, not this container, so this is the host-published backend port.
-      VITE_API_URL: http://localhost:8000
-      # File-change events don't always cross a bind mount (Docker Desktop on macOS/Windows);
-      # polling keeps hot reload working.
-      CHOKIDAR_USEPOLLING: "true"
-    depends_on:
-      - app
-    volumes:
-      - ./i-dolly-frontend:/app
-      # Keep the image's node_modules instead of the (possibly missing or host-OS) host copy.
-      - /app/node_modules
+  - i-dolly-frontend/docker-compose.yml

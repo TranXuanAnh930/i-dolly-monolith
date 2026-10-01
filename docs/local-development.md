@@ -3,10 +3,9 @@
 [← Back to README](../README.md)
 
 One `docker compose up` at the repo root starts the whole stack: the backend (API, Celery worker,
-Postgres, Redis) and the frontend dev server. The root
-[`docker-compose.yaml`](../docker-compose.yaml) pulls in the backend's own compose file, so the
-backend services are defined in one place, and adds a `frontend` service built from
-[`docker/frontend.Dockerfile`](../docker/frontend.Dockerfile).
+Postgres, Redis) and the frontend, built with Vite and served by nginx. The root
+[`docker-compose.yaml`](../docker-compose.yaml) only includes each submodule's own compose file, so
+every service is defined in one place.
 
 Each app can still run on its own; see [Running each app on its own](#running-each-app-on-its-own).
 
@@ -14,7 +13,7 @@ Each app can still run on its own; see [Running each app on its own](#running-ea
 
 - The submodules checked out: `git submodule update --init --recursive`
 - Docker Desktop, or Docker Engine with Compose v2.20 or later (the root compose file uses `include`)
-- Node.js and npm, only to run the frontend outside Docker
+- Node.js 22+ and npm, only to run the frontend outside Docker (e.g. for hot reload or its tests)
 - Python 3.12, only for running backend unit tests or ruff outside Docker
 
 ## 1. Configure the backend
@@ -47,17 +46,23 @@ This starts five containers and runs the database migrations on boot:
 
 | Service | Container | Port on your machine |
 |---|---|---|
-| `frontend` (Vite) | `i-dolly-frontend` | `8080` — open `http://localhost:8080` |
+| `frontend` (nginx) | `i-dolly-monolith-frontend-1` | `8080` — open `http://localhost:8080` |
 | `app` (FastAPI) | `i-dolly-backend` | `8000` — API docs at `http://localhost:8000/docs` |
 | `worker` (Celery) | `i-dolly-worker` | — (runs the lottery draw and sends email) |
 | `postgres` | `postgres_latest` | `5433` |
 | `redis` | `redis` | `6379` |
 
-Both source trees are bind-mounted, so edits reload without a rebuild: uvicorn restarts the API and
-Vite hot-reloads the frontend. Rebuild (`--build`) after changing `requirements.txt` or
-`package.json`. The frontend container sets `VITE_API_URL=http://localhost:8000`, the API's
-published port, because the browser rather than the container makes the API calls. The backend's
-default `CORS_ORIGINS` already allows `http://localhost:8080`.
+The backend source is bind-mounted, so uvicorn restarts the API on every edit; rebuild (`--build`)
+after changing `requirements.txt`. The frontend container serves a production build, so frontend
+edits need a rebuild too. For hot reload while working on the frontend, run the
+[frontend on its own](#frontend) next to this stack (stop the `frontend` service first, since both
+use port `8080`: `docker compose stop frontend`).
+
+The frontend bundle calls the API at `http://localhost:8000`, the API's published port, because the
+browser rather than the container makes the API calls. Vite inlines this URL at build time; to point
+at another backend, rebuild with it set, e.g.
+`VITE_API_URL=https://api.example.com docker compose up --build`. The backend's default
+`CORS_ORIGINS` already allows `http://localhost:8080`.
 
 Stop with `docker compose down`; add `-v` to also delete the Postgres data volume.
 
@@ -101,11 +106,13 @@ python -m pytest tests/unit
 ruff check .
 ```
 
-Frontend tests and lint run in the `frontend` container:
+The frontend image only holds the built files, so run its tests and lint outside Docker:
 
 ```bash
-docker compose exec frontend npm test
-docker compose exec frontend npm run lint
+cd i-dolly-frontend
+npm ci
+npm test
+npm run lint
 ```
 
 ## Running each app on its own
@@ -133,6 +140,9 @@ Starts the Vite dev server on `http://localhost:8080`. It targets the backend vi
 [`src/env.js`](https://github.com/TranXuanAnh930/i-dolly-frontend/blob/main/src/env.js), which
 reads `VITE_API_URL` and falls back to `http://localhost:8000`, matching the backend's port, so no
 config change is needed for local dev against a locally-running backend.
+
+The frontend submodule also has its own `docker compose up --build` and a `Makefile` (`make` lists
+the targets).
 
 Full step-by-step (env vars, tests, linting) for each: their own READMEs,
 [backend](https://github.com/TranXuanAnh930/i-dolly-backend#readme) and

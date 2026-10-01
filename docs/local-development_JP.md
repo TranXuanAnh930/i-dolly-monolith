@@ -3,11 +3,9 @@
 [← README に戻る](../README_JP.md)
 
 リポジトリのルートで `docker compose up` を 1 回実行するだけで、スタック全体が起動します: バックエンド
-（API、Celery ワーカー、Postgres、Redis）とフロントエンドの開発サーバーです。ルートの
-[`docker-compose.yaml`](../docker-compose.yaml) はバックエンド自身の compose ファイルを取り込むため、
-バックエンドのサービス定義は 1 か所だけにあります。そこに
-[`docker/frontend.Dockerfile`](../docker/frontend.Dockerfile) からビルドする `frontend` サービスを
-追加しています。
+（API、Celery ワーカー、Postgres、Redis）と、Vite でビルドし nginx で配信するフロントエンドです。ルートの
+[`docker-compose.yaml`](../docker-compose.yaml) は各サブモジュール自身の compose ファイルを取り込むだけなので、
+すべてのサービス定義はそれぞれ 1 か所だけにあります。
 
 各アプリを個別に実行することもできます。[各アプリを個別に実行する](#各アプリを個別に実行する)を
 参照してください。
@@ -16,7 +14,7 @@
 
 - サブモジュールのチェックアウト: `git submodule update --init --recursive`
 - Docker Desktop、または Compose v2.20 以降の Docker Engine（ルートの compose ファイルは `include` を使用）
-- Node.js と npm（フロントエンドを Docker の外で実行する場合のみ）
+- Node.js 22 以降と npm（フロントエンドを Docker の外で実行する場合のみ。ホットリロードやテストなど）
 - Python 3.12（Docker の外でバックエンドのユニットテストや ruff を実行する場合のみ）
 
 ## 1. バックエンドの設定
@@ -49,17 +47,22 @@ docker compose up --build
 
 | サービス | コンテナ | ローカルマシンのポート |
 |---|---|---|
-| `frontend`（Vite） | `i-dolly-frontend` | `8080` — `http://localhost:8080` を開く |
+| `frontend`（nginx） | `i-dolly-monolith-frontend-1` | `8080` — `http://localhost:8080` を開く |
 | `app`（FastAPI） | `i-dolly-backend` | `8000` — API ドキュメントは `http://localhost:8000/docs` |
 | `worker`（Celery） | `i-dolly-worker` | —（抽選処理とメール送信を実行） |
 | `postgres` | `postgres_latest` | `5433` |
 | `redis` | `redis` | `6379` |
 
-両方のソースツリーはバインドマウントされているため、編集は再ビルドなしで反映されます: uvicorn が API を
-再起動し、Vite がフロントエンドをホットリロードします。`requirements.txt` や `package.json` を変更した
-場合は再ビルド（`--build`）してください。API を呼び出すのはコンテナではなくブラウザなので、フロントエンドの
-コンテナは `VITE_API_URL=http://localhost:8000`（API の公開ポート）を設定しています。バックエンドの
-デフォルトの `CORS_ORIGINS` はすでに `http://localhost:8080` を許可しています。
+バックエンドのソースはバインドマウントされているため、編集するたびに uvicorn が API を再起動します。
+`requirements.txt` を変更した場合は再ビルド（`--build`）してください。フロントエンドのコンテナは本番ビルドを
+配信するため、フロントエンドの編集にも再ビルドが必要です。フロントエンドをホットリロードしながら開発するには、
+このスタックと並行して[フロントエンドを個別に実行](#フロントエンド)してください（どちらもポート `8080` を
+使うため、先に `docker compose stop frontend` で `frontend` サービスを停止します）。
+
+API を呼び出すのはコンテナではなくブラウザなので、フロントエンドのバンドルは API の公開ポートである
+`http://localhost:8000` を呼び出します。この URL は Vite がビルド時に埋め込みます。別のバックエンドを
+指すには、値を設定して再ビルドします（例: `VITE_API_URL=https://api.example.com docker compose up --build`）。
+バックエンドのデフォルトの `CORS_ORIGINS` はすでに `http://localhost:8080` を許可しています。
 
 停止するには `docker compose down` を実行します。`-v` を付けると Postgres のデータボリュームも削除されます。
 
@@ -103,11 +106,13 @@ python -m pytest tests/unit
 ruff check .
 ```
 
-フロントエンドのテストとリントは `frontend` コンテナ内で実行します:
+フロントエンドのイメージにはビルド済みファイルしか含まれないため、テストとリントは Docker の外で実行します:
 
 ```bash
-docker compose exec frontend npm test
-docker compose exec frontend npm run lint
+cd i-dolly-frontend
+npm ci
+npm test
+npm run lint
 ```
 
 ## 各アプリを個別に実行する
@@ -135,6 +140,9 @@ Vite の開発サーバーが `http://localhost:8080` で起動します。バ�
 [`src/env.js`](https://github.com/TranXuanAnh930/i-dolly-frontend/blob/main/src/env.js) で決まり、
 `VITE_API_URL` を読み取り、未設定の場合は `http://localhost:8000`（バックエンドのポート）に
 フォールバックします。そのため、ローカルで起動したバックエンドに対して開発する場合は設定変更は不要です。
+
+フロントエンドのサブモジュールにも独自の `docker compose up --build` と `Makefile`（`make` でターゲット一覧を
+表示）があります。
 
 それぞれの詳細な手順（環境変数、テスト、リント）は、各リポジトリの README を参照してください:
 [バックエンド](https://github.com/TranXuanAnh930/i-dolly-backend#readme)、
